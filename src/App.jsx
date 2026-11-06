@@ -200,17 +200,16 @@ export default function App() {
   const [barberos, setBarberos] = useState([]);
   const [clientes, setClientes] = useState([]); 
   const [cargando, setCargando] = useState(true);
-  const [isAddingCita, setIsAddingCita] = useState(false);
   
+  // Estados para crear
+  const [isAddingCita, setIsAddingCita] = useState(false);
   const [newCita, setNewCita] = useState({ 
-    user_id: '', 
-    barbero_id: '', 
-    dia: '', 
-    hora: '', 
-    total_precio: '',
-    total_minutos: 30,
-    barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
+    user_id: '', barbero_id: '', dia: '', hora: '', total_precio: '', total_minutos: 30, barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
   });
+
+  // Estados para editar / reprogramar
+  const [editingCitaId, setEditingCitaId] = useState(null);
+  const [editCitaData, setEditCitaData] = useState({});
 
   // Escuchar cambios en la URL (por ejemplo atrás/adelante en el navegador)
   useEffect(() => {
@@ -307,13 +306,7 @@ export default function App() {
       setIsAddingCita(false);
       
       setNewCita({ 
-        user_id: '', 
-        barbero_id: '', 
-        dia: '', 
-        hora: '', 
-        total_precio: '',
-        total_minutos: 30,
-        barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
+        user_id: '', barbero_id: '', dia: '', hora: '', total_precio: '', total_minutos: 30, barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
       });
       
       mostrarExito('¡Cita sincronizada con éxito en el móvil!');
@@ -321,6 +314,79 @@ export default function App() {
     } catch (error) {
       console.error('Error detallado:', error);
       alert('Motivo del rechazo: ' + error.message); 
+    }
+  };
+
+  // Función para activar el modo de edición de una cita
+  const handleEditClick = (cita) => {
+    setEditingCitaId(cita.id);
+    
+    // Convertimos la fecha UTC a formato YYYY-MM-DD para el input type="date"
+    const diaFormatoInput = cita.fecha_hora_utc 
+        ? cita.fecha_hora_utc.substring(0, 10) 
+        : new Date().toISOString().substring(0, 10);
+
+    setEditCitaData({
+      barbero_id: cita.barbero_id,
+      dia: diaFormatoInput,
+      hora: cita.hora
+    });
+  };
+
+  // Función para guardar los cambios de reprogramación
+  const handleUpdateCita = async (id) => {
+    try {
+      if (!editCitaData.dia || !editCitaData.hora) throw new Error("Fecha y hora son obligatorias.");
+      
+      const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const fechaLocal = new Date(`${editCitaData.dia}T00:00:00`); 
+      const diaTexto = diasSemana[fechaLocal.getDay()]; 
+      const fechaHoraIso = new Date(`${editCitaData.dia}T${editCitaData.hora}:00`).toISOString();
+
+      const { error } = await supabase
+        .from('citas')
+        .update({
+          barbero_id: parseInt(editCitaData.barbero_id),
+          dia: diaTexto,
+          hora: editCitaData.hora,
+          fecha_hora_utc: fechaHoraIso
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Actualizar tabla local
+      setCitas(citas.map(c => c.id === id ? {
+         ...c, 
+         barbero_id: parseInt(editCitaData.barbero_id),
+         dia: diaTexto,
+         hora: editCitaData.hora,
+         fecha_hora_utc: fechaHoraIso
+      } : c));
+      
+      setEditingCitaId(null);
+      mostrarExito("¡Cita reprogramada con éxito!");
+
+    } catch (error) {
+      console.error("Error al actualizar la cita:", error);
+      alert("Error al actualizar: " + error.message);
+    }
+  };
+
+  // Función para anular (borrar) una cita
+  const handleAnularCita = async (id) => {
+    const confirmar = window.confirm("¿Seguro que deseas anular esta cita? Desaparecerá de la app del cliente de forma irreversible.");
+    if (confirmar) {
+      try {
+        const { error } = await supabase.from('citas').delete().eq('id', id);
+        if (error) throw error;
+        
+        setCitas(citas.filter(c => c.id !== id));
+        mostrarExito('Cita anulada correctamente.');
+      } catch (error) {
+        console.error("Error al anular la cita:", error);
+        alert("Error al anular: " + error.message);
+      }
     }
   };
 
@@ -453,6 +519,7 @@ export default function App() {
                           </td>
                         </tr>
                       )}
+                      
                       {citas.map((cita) => {
                         const barberoAsignado = barberos.find((b) => b.id === cita.barbero_id);
                         const clienteAsignado = clientes.find((c) => c.id === cita.user_id);
@@ -462,14 +529,51 @@ export default function App() {
 
                         return (
                           <tr key={cita.id} className="hover:bg-white/5 transition-colors">
-                            <td className="p-4 font-mono text-barberGold font-bold">#{cita.id}</td>
-                            <td className="p-4 flex flex-col">
-                              <span className="font-semibold">{nombreCliente}</span>
-                              <span className="text-xs text-barberGrayText">con {nombreBarbero}</span>
-                            </td>
-                            <td className="p-4">{cita.dia} a las {cita.hora}</td>
-                            <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
-                            <td className="p-4"><span className="bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">Confirmada</span></td>
+                            {editingCitaId === cita.id ? (
+                              <>
+                                <td className="p-4 font-mono text-barberGold font-bold">#{cita.id}</td>
+                                <td className="p-4 flex flex-col space-y-2">
+                                  <span className="font-semibold">{nombreCliente}</span>
+                                  <select 
+                                    className="w-full bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none"
+                                    value={editCitaData.barbero_id} 
+                                    onChange={(e) => setEditCitaData({...editCitaData, barbero_id: e.target.value})}
+                                  >
+                                    {barberos.map((b) => (
+                                      <option key={b.id} value={b.id}>{b.nombre}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex flex-col space-y-2">
+                                    <input type="date" className="bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none [color-scheme:dark]" value={editCitaData.dia} onChange={(e) => setEditCitaData({...editCitaData, dia: e.target.value})} />
+                                    <input type="time" className="bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none [color-scheme:dark]" value={editCitaData.hora} onChange={(e) => setEditCitaData({...editCitaData, hora: e.target.value})} />
+                                  </div>
+                                </td>
+                                <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
+                                <td className="p-4 flex flex-col space-y-2">
+                                  <button onClick={() => handleUpdateCita(cita.id)} className="w-full px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded">Guardar</button>
+                                  <button onClick={() => setEditingCitaId(null)} className="w-full px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded">Cancelar</button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="p-4 font-mono text-barberGold font-bold">#{cita.id}</td>
+                                <td className="p-4 flex flex-col">
+                                  <span className="font-semibold">{nombreCliente}</span>
+                                  <span className="text-xs text-barberGrayText">con {nombreBarbero}</span>
+                                </td>
+                                <td className="p-4">{cita.dia} a las {cita.hora}</td>
+                                <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
+                                <td className="p-4">
+                                  <div className="flex items-center space-x-3">
+                                    <span className="bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">Confirmada</span>
+                                    <button onClick={() => handleEditClick(cita)} className="text-xs text-blue-400 hover:text-blue-300 underline font-semibold transition-colors">Reprogramar</button>
+                                    <button onClick={() => handleAnularCita(cita.id)} className="text-xs text-red-400 hover:text-red-300 underline font-semibold transition-colors">Anular</button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })}
