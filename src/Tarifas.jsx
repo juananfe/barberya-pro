@@ -21,7 +21,13 @@ export default function Tarifas() {
 
   async function fetchServicios() {
     setCargando(true);
-    const { data, error } = await supabase.from('servicios').select('*').order('id', { ascending: false });
+    // Solo cargamos las tarifas que estén marcadas como activas
+    const { data, error } = await supabase
+      .from('servicios')
+      .select('*')
+      .eq('activo', true)
+      .order('id', { ascending: false });
+      
     if (!error) setServicios(data || []);
     setCargando(false);
   }
@@ -40,7 +46,8 @@ export default function Tarifas() {
       const servicioParaGuardar = {
         ...newServicio,
         duracion_min: parseInt(newServicio.duracion_min) || 30,
-        precio: parseFloat(newServicio.precio) || 0
+        precio: parseFloat(newServicio.precio) || 0,
+        activo: true // Aseguramos que el nuevo servicio nazca activo
       };
 
       const { data, error } = await supabase.from('servicios').insert([servicioParaGuardar]).select();
@@ -63,20 +70,21 @@ export default function Tarifas() {
     }
   };
 
-  // Función para eliminar un servicio de Supabase
+  // Función para ocultar un servicio de Supabase (borrado lógico)
   const handleDeleteServicio = async (servicioId) => {
     const confirmar = window.confirm("¿Estás seguro de que deseas eliminar este servicio? Dejará de estar disponible para reservas en la app móvil.");
     
     if (confirmar) {
       try {
+        // En lugar de .delete(), usamos .update() para cambiar la bandera a falso
         const { error } = await supabase
           .from('servicios')
-          .delete()
+          .update({ activo: false })
           .eq('id', servicioId);
 
         if (error) throw error;
 
-        // Filtramos la lista local para remover el servicio borrado visualmente
+        // Filtramos la lista local para remover el servicio ocultado visualmente
         setServicios(servicios.filter((serv) => serv.id !== servicioId));
         mostrarExito('¡Servicio eliminado correctamente!');
         
