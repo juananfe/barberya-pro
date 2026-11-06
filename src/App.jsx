@@ -5,6 +5,54 @@ import Horarios from './Horarios';
 import Inventario from './Inventario'; 
 import Tarifas from './Tarifas'; 
 
+// Función para determinar si una cita ha vencido (margen de 30 minutos)
+export const esCitaVigente = (diaTexto, horaTexto) => {
+  try {
+    const partes = horaTexto.trim().split(":");
+    const hora = parseInt(partes[0], 10);
+    const minuto = parseInt(partes[1], 10);
+    if (isNaN(hora)) return false;
+
+    const ahora = new Date();
+    const cita = new Date();
+    cita.setHours(hora, minuto, 0, 0);
+
+    const diaLimpio = diaTexto.trim().toLowerCase();
+
+    // Caso 1: Fecha con formato numérico (ej: "05/11/2026", "2026-11-05")
+    if (diaLimpio.includes("/") || diaLimpio.includes("-")) {
+      const sep = diaLimpio.includes("/") ? "/" : "-";
+      const p = diaLimpio.split(sep);
+      let year, month, day;
+      if (p[0].length === 4) { // yyyy-mm-dd
+         year = p[0]; month = p[1]; day = p[2];
+      } else { // dd/mm/yyyy
+         day = p[0]; month = p[1]; year = p[2];
+      }
+      cita.setFullYear(year, month - 1, day);
+    } else {
+      // Caso 2: Nombre del día de la semana
+      const diasMap = { "domingo": 0, "lunes": 1, "martes": 2, "miércoles": 3, "miercoles": 3, "jueves": 4, "viernes": 5, "sábado": 6, "sabado": 6 };
+      if (!(diaLimpio in diasMap)) return false;
+      
+      const diaObjetivo = diasMap[diaLimpio];
+      const diaActual = ahora.getDay();
+      
+      if (diaObjetivo < diaActual) return false;
+      
+      if (diaObjetivo > diaActual) {
+        cita.setDate(ahora.getDate() + (diaObjetivo - diaActual));
+      }
+    }
+    
+    // Si han pasado más de 30 minutos, ya no es vigente
+    const limite = cita.getTime() + (30 * 60 * 1000);
+    return Date.now() <= limite;
+  } catch(e) {
+    return false;
+  }
+};
+
 // Componente público de Política de Privacidad adaptado a CompuAlgaba
 function PoliticaPrivacidad({ onVolver }) {
   return (
@@ -198,7 +246,19 @@ export default function App() {
   async function fetchCitas() {
     setCargando(true);
     const { data, error } = await supabase.from('citas').select('*').order('id', { ascending: false });
-    if (!error) setCitas(data || []);
+    
+    if (!error && data) {
+      const citasActivas = [];
+      for (const cita of data) {
+        if (esCitaVigente(cita.dia, cita.hora)) {
+          citasActivas.push(cita);
+        } else {
+          // La cita expiró, la eliminamos físicamente de Supabase
+          await supabase.from('citas').delete().eq('id', cita.id);
+        }
+      }
+      setCitas(citasActivas);
+    }
     setCargando(false);
   }
 
