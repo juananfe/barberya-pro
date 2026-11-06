@@ -65,6 +65,30 @@ export default function Inventario() {
     }
   };
 
+  // Función para eliminar productos de Supabase
+  const handleDeleteProducto = async (productoId) => {
+    const confirmar = window.confirm("¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer y desaparecerá de la app móvil.");
+    
+    if (confirmar) {
+      try {
+        const { error } = await supabase
+          .from('productos')
+          .delete()
+          .eq('id', productoId);
+
+        if (error) throw error;
+
+        // Actualizamos la lista local filtrando el eliminado
+        setProductos(productos.filter((prod) => prod.id !== productoId));
+        mostrarExito('¡Producto eliminado correctamente!');
+        
+      } catch (error) {
+        console.error("Error al eliminar el producto:", error.message);
+        alert("Hubo un error al eliminar el producto.");
+      }
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {/* NOTIFICACIÓN TOAST FLOTANTE */}
@@ -93,6 +117,7 @@ export default function Inventario() {
                 <th className="p-4">Categoría</th>
                 <th className="p-4">Precio</th>
                 <th className="p-4">Stock</th>
+                <th className="p-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-barberBorder text-sm">
@@ -109,15 +134,17 @@ export default function Inventario() {
                   <td className="p-4">
                     <input type="number" placeholder="0.00" step="0.01" className="w-20 bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none" value={newProducto.precio} onChange={(e) => setNewProducto({...newProducto, precio: e.target.value})} />
                   </td>
-                  <td className="p-4 flex items-center space-x-2">
+                  <td className="p-4">
                     <input type="number" placeholder="0" className="w-16 bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none" value={newProducto.stock} onChange={(e) => setNewProducto({...newProducto, stock: e.target.value})} />
+                  </td>
+                  <td className="p-4 flex items-center justify-center space-x-2">
                     <button onClick={handleCreate} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded">Guardar</button>
                     <button onClick={() => setIsAdding(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded">Cancelar</button>
                   </td>
                 </tr>
               )}
               {productos.length === 0 && !isAdding && (
-                <tr><td colSpan="5" className="p-4 text-center text-barberGrayText">No hay productos en el inventario.</td></tr>
+                <tr><td colSpan="6" className="p-4 text-center text-barberGrayText">No hay productos en el inventario.</td></tr>
               )}
               {productos.map((prod) => (
                 <tr key={prod.id} className="hover:bg-white/5 transition-colors">
@@ -136,6 +163,14 @@ export default function Inventario() {
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${prod.stock > 10 ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'}`}>
                       {prod.stock} un.
                     </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => handleDeleteProducto(prod.id)} 
+                      className="text-xs bg-red-900/40 text-red-400 border border-red-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-900/60 transition-colors"
+                    >
+                      Eliminar
+                    </button>
                   </td>
                 </tr>
               ))}
