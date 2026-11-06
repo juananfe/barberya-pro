@@ -566,10 +566,10 @@ export default function App() {
                                 <td className="p-4">{cita.dia} a las {cita.hora}</td>
                                 <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
                                 <td className="p-4">
-                                  <div className="flex items-center space-x-3">
+                                  <div className="flex items-center space-x-2">
                                     <span className="bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">Confirmada</span>
-                                    <button onClick={() => handleEditClick(cita)} className="text-xs text-blue-400 hover:text-blue-300 underline font-semibold transition-colors">Reprogramar</button>
-                                    <button onClick={() => handleAnularCita(cita.id)} className="text-xs text-red-400 hover:text-red-300 underline font-semibold transition-colors">Anular</button>
+                                    <button onClick={() => handleEditClick(cita)} className="text-xs bg-blue-900/40 text-blue-400 border border-blue-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-900/60 transition-colors">Reprogramar</button>
+                                    <button onClick={() => handleAnularCita(cita.id)} className="text-xs bg-red-900/40 text-red-400 border border-red-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-900/60 transition-colors">Anular</button>
                                   </div>
                                 </td>
                               </>
