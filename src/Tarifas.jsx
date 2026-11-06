@@ -63,6 +63,30 @@ export default function Tarifas() {
     }
   };
 
+  // Función para eliminar un servicio de Supabase
+  const handleDeleteServicio = async (servicioId) => {
+    const confirmar = window.confirm("¿Estás seguro de que deseas eliminar este servicio? Dejará de estar disponible para reservas en la app móvil.");
+    
+    if (confirmar) {
+      try {
+        const { error } = await supabase
+          .from('servicios')
+          .delete()
+          .eq('id', servicioId);
+
+        if (error) throw error;
+
+        // Filtramos la lista local para remover el servicio borrado visualmente
+        setServicios(servicios.filter((serv) => serv.id !== servicioId));
+        mostrarExito('¡Servicio eliminado correctamente!');
+        
+      } catch (error) {
+        console.error("Error al eliminar el servicio:", error.message);
+        alert("Hubo un error al eliminar el servicio.");
+      }
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {/* NOTIFICACIÓN TOAST FLOTANTE */}
@@ -90,6 +114,7 @@ export default function Tarifas() {
                 <th className="p-4">Servicio</th>
                 <th className="p-4">Duración</th>
                 <th className="p-4">Precio</th>
+                <th className="p-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-barberBorder text-sm">
@@ -103,15 +128,17 @@ export default function Tarifas() {
                   <td className="p-4">
                     <input type="number" placeholder="Minutos" className="w-20 bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none" value={newServicio.duracion_min} onChange={(e) => setNewServicio({...newServicio, duracion_min: e.target.value})} />
                   </td>
-                  <td className="p-4 flex items-center space-x-2">
+                  <td className="p-4">
                     <input type="number" placeholder="0.00" step="0.01" className="w-20 bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none" value={newServicio.precio} onChange={(e) => setNewServicio({...newServicio, precio: e.target.value})} />
+                  </td>
+                  <td className="p-4 flex items-center justify-center space-x-2">
                     <button onClick={handleCreate} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded">Guardar</button>
                     <button onClick={() => setIsAdding(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded">Cancelar</button>
                   </td>
                 </tr>
               )}
               {servicios.length === 0 && !isAdding && (
-                <tr><td colSpan="4" className="p-4 text-center text-barberGrayText">No hay servicios registrados.</td></tr>
+                <tr><td colSpan="5" className="p-4 text-center text-barberGrayText">No hay servicios registrados.</td></tr>
               )}
               {servicios.map((serv) => (
                 <tr key={serv.id} className="hover:bg-white/5 transition-colors">
@@ -126,6 +153,14 @@ export default function Tarifas() {
                     </span>
                   </td>
                   <td className="p-4 text-barberGold font-semibold text-base">{serv.precio} €</td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => handleDeleteServicio(serv.id)} 
+                      className="text-xs bg-red-900/40 text-red-400 border border-red-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-900/60 transition-colors"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
