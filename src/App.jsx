@@ -3,7 +3,8 @@ import { supabase } from './supabaseClient';
 import Login from './Login';
 import Horarios from './Horarios'; 
 import Inventario from './Inventario'; 
-import Tarifas from './Tarifas'; 
+import Tarifas from './Tarifas';
+import CitasAdmin from './citas';
 
 // Función para determinar si una cita ha vencido (margen de 30 minutos)
 export const esCitaVigente = (diaTexto, horaTexto) => {
@@ -193,23 +194,9 @@ export default function App() {
     return path.includes('privacidad') || path.includes('privacy');
   });
 
-  const [mensajeExito, setMensajeExito] = useState('');
-
   const [seccionActiva, setSeccionActiva] = useState('agenda');
-  const [citas, setCitas] = useState([]);
   const [barberos, setBarberos] = useState([]);
   const [clientes, setClientes] = useState([]); 
-  const [cargando, setCargando] = useState(true);
-  
-  // Estados para crear
-  const [isAddingCita, setIsAddingCita] = useState(false);
-  const [newCita, setNewCita] = useState({ 
-    user_id: '', barbero_id: '', dia: '', hora: '', total_precio: '', total_minutos: 30, barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
-  });
-
-  // Estados para editar / reprogramar
-  const [editingCitaId, setEditingCitaId] = useState(null);
-  const [editCitaData, setEditCitaData] = useState({});
 
   // Escuchar cambios en la URL (por ejemplo atrás/adelante en el navegador)
   useEffect(() => {
@@ -236,30 +223,10 @@ export default function App() {
 
   useEffect(() => {
     if (session && seccionActiva === 'agenda') {
-      fetchCitas();
       fetchBarberos();
       fetchClientes(); 
     }
   }, [seccionActiva, session]);
-
-  async function fetchCitas() {
-    setCargando(true);
-    const { data, error } = await supabase.from('citas').select('*').order('id', { ascending: false });
-    
-    if (!error && data) {
-      const citasActivas = [];
-      for (const cita of data) {
-        if (esCitaVigente(cita.dia, cita.hora)) {
-          citasActivas.push(cita);
-        } else {
-          // La cita expiró, la eliminamos físicamente de Supabase
-          await supabase.from('citas').delete().eq('id', cita.id);
-        }
-      }
-      setCitas(citasActivas);
-    }
-    setCargando(false);
-  }
 
   async function fetchBarberos() {
     const { data, error } = await supabase.from('barberos').select('*');
@@ -270,125 +237,6 @@ export default function App() {
     const { data, error } = await supabase.from('profiles').select('*');
     if (!error) setClientes(data || []);
   }
-
-  const mostrarExito = (mensaje) => {
-    setMensajeExito(mensaje);
-    setTimeout(() => {
-      setMensajeExito('');
-    }, 3000);
-  };
-
-  const handleCreateCita = async () => {
-    try {
-      if (!newCita.user_id) throw new Error("Por favor, selecciona un cliente para la cita.");
-      if (!newCita.barbero_id) throw new Error("Por favor, selecciona un barbero.");
-      if (!newCita.dia || !newCita.hora) throw new Error("Por favor, selecciona fecha y hora.");
-
-      const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const fechaLocal = new Date(`${newCita.dia}T00:00:00`); 
-      const diaTexto = diasSemana[fechaLocal.getDay()]; 
-
-      const fechaHoraIso = new Date(`${newCita.dia}T${newCita.hora}:00`).toISOString();
-
-      const citaParaGuardar = {
-        ...newCita,
-        barbero_id: parseInt(newCita.barbero_id) || 1,
-        total_precio: parseFloat(newCita.total_precio) || 0,
-        dia: diaTexto,
-        fecha_hora_utc: fechaHoraIso,
-        valorada: false
-      };
-
-      const { data, error } = await supabase.from('citas').insert([citaParaGuardar]).select();
-      if (error) throw error;
-      
-      setCitas([data[0], ...citas]);
-      setIsAddingCita(false);
-      
-      setNewCita({ 
-        user_id: '', barbero_id: '', dia: '', hora: '', total_precio: '', total_minutos: 30, barberia_id: '48eaa5e0-2a40-40bd-b36c-62fe24025b95' 
-      });
-      
-      mostrarExito('¡Cita sincronizada con éxito en el móvil!');
-      
-    } catch (error) {
-      console.error('Error detallado:', error);
-      alert('Motivo del rechazo: ' + error.message); 
-    }
-  };
-
-  // Función para activar el modo de edición de una cita
-  const handleEditClick = (cita) => {
-    setEditingCitaId(cita.id);
-    
-    // Convertimos la fecha UTC a formato YYYY-MM-DD para el input type="date"
-    const diaFormatoInput = cita.fecha_hora_utc 
-        ? cita.fecha_hora_utc.substring(0, 10) 
-        : new Date().toISOString().substring(0, 10);
-
-    setEditCitaData({
-      barbero_id: cita.barbero_id,
-      dia: diaFormatoInput,
-      hora: cita.hora
-    });
-  };
-
-  // Función para guardar los cambios de reprogramación
-  const handleUpdateCita = async (id) => {
-    try {
-      if (!editCitaData.dia || !editCitaData.hora) throw new Error("Fecha y hora son obligatorias.");
-      
-      const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const fechaLocal = new Date(`${editCitaData.dia}T00:00:00`); 
-      const diaTexto = diasSemana[fechaLocal.getDay()]; 
-      const fechaHoraIso = new Date(`${editCitaData.dia}T${editCitaData.hora}:00`).toISOString();
-
-      const { error } = await supabase
-        .from('citas')
-        .update({
-          barbero_id: parseInt(editCitaData.barbero_id),
-          dia: diaTexto,
-          hora: editCitaData.hora,
-          fecha_hora_utc: fechaHoraIso
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      // Actualizar tabla local
-      setCitas(citas.map(c => c.id === id ? {
-         ...c, 
-         barbero_id: parseInt(editCitaData.barbero_id),
-         dia: diaTexto,
-         hora: editCitaData.hora,
-         fecha_hora_utc: fechaHoraIso
-      } : c));
-      
-      setEditingCitaId(null);
-      mostrarExito("¡Cita reprogramada con éxito!");
-
-    } catch (error) {
-      console.error("Error al actualizar la cita:", error);
-      alert("Error al actualizar: " + error.message);
-    }
-  };
-
-  // Función para anular (borrar) una cita
-  const handleAnularCita = async (id) => {
-    const confirmar = window.confirm("¿Seguro que deseas anular esta cita? Desaparecerá de la app del cliente de forma irreversible.");
-    if (confirmar) {
-      try {
-        const { error } = await supabase.from('citas').delete().eq('id', id);
-        if (error) throw error;
-        
-        setCitas(citas.filter(c => c.id !== id));
-        mostrarExito('Cita anulada correctamente.');
-      } catch (error) {
-        console.error("Error al anular la cita:", error);
-        alert("Error al anular: " + error.message);
-      }
-    }
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -412,13 +260,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-barberDark text-white flex font-sans relative">
-      
-      {mensajeExito && (
-        <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl font-semibold flex items-center space-x-3 z-50 animate-bounce">
-          <span className="text-xl">✅</span>
-          <span>{mensajeExito}</span>
-        </div>
-      )}
 
       <aside className="w-64 bg-barberSurface border-r border-barberBorder flex flex-col p-6">
         <div className="flex items-center space-x-3 mb-10">
@@ -459,131 +300,7 @@ export default function App() {
         </header>
 
         <div className="p-8 flex-1 bg-barberDark overflow-y-auto">
-          {seccionActiva === 'agenda' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold">Agenda en Tiempo Real</h2>
-                <div className="flex space-x-3">
-                  <button onClick={() => setIsAddingCita(true)} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-green-500 transition-all">+ Nueva Cita</button>
-                  <button onClick={fetchCitas} className="bg-barberGold text-barberDark px-4 py-2 rounded-xl font-bold text-sm hover:bg-barberGoldLight transition-all">🔄 Actualizar</button>
-                </div>
-              </div>
-
-              {cargando ? <p className="text-barberGrayText text-sm">Cargando...</p> : (
-                <div className="bg-barberCard border border-barberBorder rounded-2xl overflow-hidden shadow-xl">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-barberBorder bg-barberSurface text-xs text-barberGrayText">
-                        <th className="p-4">ID Cita</th><th className="p-4">Cliente & Barbero</th><th className="p-4">Día & Hora</th><th className="p-4">Precio Total</th><th className="p-4">Estado / Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-barberBorder text-sm">
-                      {isAddingCita && (
-                        <tr className="bg-[#2a2a2a] border-b-2 border-green-600/30">
-                          <td className="p-4 text-barberGrayText italic">Auto</td>
-                          <td className="p-4 flex flex-col space-y-2">
-                            <select 
-                              className="w-full bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none cursor-pointer"
-                              value={newCita.user_id} 
-                              onChange={(e) => setNewCita({...newCita, user_id: e.target.value})}
-                            >
-                              <option value="">👤 Seleccionar Cliente...</option>
-                              {clientes.map((c) => (
-                                <option key={c.id} value={c.id}>{c.full_name || c.nombre || c.email || 'Cliente sin nombre'}</option>
-                              ))}
-                            </select>
-
-                            <select 
-                              className="w-full bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none cursor-pointer"
-                              value={newCita.barbero_id} 
-                              onChange={(e) => setNewCita({...newCita, barbero_id: e.target.value})}
-                            >
-                              <option value="">✂️ Seleccionar Barbero...</option>
-                              {barberos.map((b) => (
-                                <option key={b.id} value={b.id}>{b.nombre || `Empleado #${b.id}`}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex space-x-2">
-                              <input type="date" className="bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 cursor-pointer" value={newCita.dia} onChange={(e) => setNewCita({...newCita, dia: e.target.value})} />
-                              <input type="time" className="bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 cursor-pointer" value={newCita.hora} onChange={(e) => setNewCita({...newCita, hora: e.target.value})} />
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <input type="number" placeholder="0.00" step="0.01" className="w-20 bg-[#1a1a1a] text-white text-xs border border-gray-600 rounded p-1.5 outline-none" value={newCita.total_precio} onChange={(e) => setNewCita({...newCita, total_precio: e.target.value})} />
-                          </td>
-                          <td className="p-4 space-x-2">
-                            <button onClick={handleCreateCita} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded">Crear</button>
-                            <button onClick={() => setIsAddingCita(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded">Cancelar</button>
-                          </td>
-                        </tr>
-                      )}
-                      
-                      {citas.map((cita) => {
-                        const barberoAsignado = barberos.find((b) => b.id === cita.barbero_id);
-                        const clienteAsignado = clientes.find((c) => c.id === cita.user_id);
-                        
-                        const nombreBarbero = barberoAsignado ? barberoAsignado.nombre : `Barbero #${cita.barbero_id}`;
-                        const nombreCliente = clienteAsignado ? (clienteAsignado.full_name || clienteAsignado.nombre || clienteAsignado.email) : 'Cliente Web';
-
-                        return (
-                          <tr key={cita.id} className="hover:bg-white/5 transition-colors">
-                            {editingCitaId === cita.id ? (
-                              <>
-                                <td className="p-4 font-mono text-barberGold font-bold">#{cita.id}</td>
-                                <td className="p-4 flex flex-col space-y-2">
-                                  <span className="font-semibold">{nombreCliente}</span>
-                                  <select 
-                                    className="w-full bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none"
-                                    value={editCitaData.barbero_id} 
-                                    onChange={(e) => setEditCitaData({...editCitaData, barbero_id: e.target.value})}
-                                  >
-                                    {barberos.map((b) => (
-                                      <option key={b.id} value={b.id}>{b.nombre}</option>
-                                    ))}
-                                  </select>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex flex-col space-y-2">
-                                    <input type="date" className="bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none [color-scheme:dark]" value={editCitaData.dia} onChange={(e) => setEditCitaData({...editCitaData, dia: e.target.value})} />
-                                    <input type="time" className="bg-[#1a1a1a] text-white text-xs border border-barberGold rounded p-1.5 outline-none [color-scheme:dark]" value={editCitaData.hora} onChange={(e) => setEditCitaData({...editCitaData, hora: e.target.value})} />
-                                  </div>
-                                </td>
-                                <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
-                                <td className="p-4 flex flex-col space-y-2">
-                                  <button onClick={() => handleUpdateCita(cita.id)} className="w-full px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs rounded">Guardar</button>
-                                  <button onClick={() => setEditingCitaId(null)} className="w-full px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs rounded">Cancelar</button>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="p-4 font-mono text-barberGold font-bold">#{cita.id}</td>
-                                <td className="p-4 flex flex-col">
-                                  <span className="font-semibold">{nombreCliente}</span>
-                                  <span className="text-xs text-barberGrayText">con {nombreBarbero}</span>
-                                </td>
-                                <td className="p-4">{cita.dia} a las {cita.hora}</td>
-                                <td className="p-4 text-barberGold font-semibold">{cita.total_precio} €</td>
-                                <td className="p-4">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full text-xs font-semibold">Confirmada</span>
-                                    <button onClick={() => handleEditClick(cita)} className="text-xs bg-blue-900/40 text-blue-400 border border-blue-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-900/60 transition-colors">Reprogramar</button>
-                                    <button onClick={() => handleAnularCita(cita.id)} className="text-xs bg-red-900/40 text-red-400 border border-red-900/50 px-3 py-1.5 rounded-lg font-semibold hover:bg-red-900/60 transition-colors">Anular</button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
+          {seccionActiva === 'agenda' && <CitasAdmin barberos={barberos} clientes={clientes} />}
           {seccionActiva === 'horarios' && <Horarios />}
           {seccionActiva === 'inventario' && <Inventario />}
           {seccionActiva === 'tarifas' && <Tarifas />}
